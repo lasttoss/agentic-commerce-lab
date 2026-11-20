@@ -188,3 +188,52 @@ class QuotaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuestTests(unittest.TestCase):
+    """The default. Everything here is about what an anonymous visitor cannot do."""
+
+    def setUp(self) -> None:
+        import demo_login
+        self.gate = Gate(SECRET, Ledger())
+        self.guest = demo_login.guest_token()
+
+    def test_a_guest_sees_one_tool(self) -> None:
+        self.assertEqual(self.gate.visible_tools("guest"), ["catalog.search"])
+
+    def test_a_guest_cannot_read_orders_or_charge(self) -> None:
+        for tool, args in (("orders.read", {"id": "o-1"}),
+                           ("checkout.charge", {"sku": "sku-coffee-250g", "qty": 1})):
+            with self.subTest(tool=tool):
+                answer = self.gate.call(token=self.guest, tool=tool, args=args,
+                                        idempotency_key="order-2001")
+                self.assertEqual(answer.reason, "tool_not_allowed")
+
+    def test_a_guest_cannot_name_a_person(self) -> None:
+        answer = self.gate.call(token=self.guest, tool="catalog.search",
+                                 args={"q": "cà phê", "user_id": "u-1"})
+        self.assertEqual(answer.reason, "identity_in_arguments")
+
+    def test_the_demo_login_issues_a_narrower_token_than_a_password_mistake(self) -> None:
+        import demo_login
+        with self.assertRaises(PermissionError):
+            demo_login.issue("acme-web", "wrong")
+        token = demo_login.issue("acme-web", "hunter2")
+        self.assertTrue(self.gate.call(token=token, tool="orders.read", args={"id": "o-1"}).ok)
+        # ...and the merchant still cannot read people, because a password changes nothing
+        # about the policy
+        self.assertEqual(self.gate.call(token=token, tool="users.read", args={}).reason,
+                         "tool_not_allowed")
+
+    def test_a_logged_in_user_still_needs_their_own_grant_to_charge(self) -> None:
+        import demo_login
+        merchant = demo_login.issue("acme-web", "hunter2")
+        without = self.gate.call(token=merchant, tool="checkout.charge",
+                                  args={"sku": "sku-tea-100g", "qty": 1},
+                                  idempotency_key="order-2002")
+        self.assertEqual(without.reason, "no_subject")
+        with_grant = self.gate.call(token=merchant, grant=demo_login.issue_user("user-42"),
+                                     tool="checkout.charge",
+                                     args={"sku": "sku-tea-100g", "qty": 1},
+                                     idempotency_key="order-2002")
+        self.assertTrue(with_grant.ok)

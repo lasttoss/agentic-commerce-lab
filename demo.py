@@ -9,6 +9,7 @@ from __future__ import annotations
 from charge import Ledger
 from gate import Gate
 from identity import mint
+from demo_login import guest_token, issue, issue_user
 from tests.test_gate import SECRET, internal_token, partner_token, user_grant
 
 
@@ -22,10 +23,43 @@ def show(label: str, answer) -> None:
     print(f"  {label:<44} {answer.reason:<24}{detail}")
 
 
+def _maybe(fn):
+    """Run something that may raise, and show the refusal as a reason like every other line."""
+    from gate import Answer
+    try:
+        fn()
+    except PermissionError as exc:
+        return Answer(ok=False, reason="unauthenticated", run_id="run_none", data={"why": str(exc)})
+    return Answer(ok=True, reason="ok", run_id="run_none")
+
+
 def main() -> None:
     gate = Gate(SECRET, Ledger())
 
-    print("tools a tier can SEE (not 'is blocked from')")
+    print("the default is guest: nobody logs in, and guest is the narrowest profile")
+    show("guest -> catalog.search", gate.call(token=guest_token(), tool="catalog.search",
+                                            args={"q": "cà phê"}))
+    show("guest -> orders.read", gate.call(token=guest_token(), tool="orders.read",
+                                          args={"id": "o-1"}))
+    show("guest -> checkout.charge", gate.call(token=guest_token(), tool="checkout.charge",
+                                              args={"sku": "sku-coffee-250g", "qty": 1},
+                                              idempotency_key="order-2000"))
+    print("\n  demo login (a stand-in, see demo_login.py)")
+    show("password wrong", _maybe(lambda: issue("acme-web", "wrong")))
+    show("password right -> orders.read",
+         gate.call(token=issue("acme-web", "hunter2"), tool="orders.read", args={"id": "o-1"}))
+    show("password right -> users.read",
+         gate.call(token=issue("acme-web", "hunter2"), tool="users.read", args={}))
+    show("logged in, still no grant -> charge",
+         gate.call(token=issue("acme-web", "hunter2"), tool="checkout.charge",
+                   args={"sku": "sku-coffee-250g", "qty": 1}, idempotency_key="order-2000"))
+    show("logged in + user's own grant -> charge",
+         gate.call(token=issue("acme-web", "hunter2"), grant=issue_user("user-42"),
+                   tool="checkout.charge", args={"sku": "sku-coffee-250g", "qty": 1},
+                   idempotency_key="order-2000"))
+
+    print("\ntools a tier can SEE (not 'is blocked from')")
+    print(f"  guest   : {gate.visible_tools('guest')}")
     print(f"  internal: {gate.visible_tools('internal')}")
     print(f"  partner : {gate.visible_tools('partner')}")
 

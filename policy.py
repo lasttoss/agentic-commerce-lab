@@ -46,7 +46,19 @@ PARTNER = Profile(
     sees_other_people=False,
 )
 
-PROFILES = {p.name: p for p in (INTERNAL, PARTNER)}
+GUEST = Profile(
+    name="guest",
+    tools=frozenset({
+        # An anonymous visitor may ask what the shop sells. Nothing about a person, nothing that
+        # costs money: an anonymous endpoint that can spend is an endpoint somebody will find.
+        "catalog.search",
+    }),
+    calls_per_minute=12,
+    may_charge=False,
+    sees_other_people=False,
+)
+
+PROFILES = {p.name: p for p in (INTERNAL, PARTNER, GUEST)}
 
 
 def for_tier(tier: str) -> Profile:

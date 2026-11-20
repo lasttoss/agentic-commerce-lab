@@ -90,9 +90,13 @@ class Principal:
         return scope in self.scopes
 
 
-def principal(secret: bytes, token: str) -> Principal:
-    """A client token on its own. Never carries a subject."""
-    claims = open_token(secret, token)
+def principal_from_claims(claims: dict[str, Any]) -> Principal:
+    """THE seam. Put your identity provider here.
+
+    OIDC, session cookie, API key, mTLS -- none of that reaches the gate. What reaches the gate is
+    this function's answer: a client, a tier, and (in the charging case) a subject. Everything
+    downstream assumes those three were verified by somebody, and never asks again.
+    """
     for required in ("client_id", "tier"):
         if not claims.get(required):
             raise Refused("unauthenticated", f"token has no {required}")
@@ -102,6 +106,11 @@ def principal(secret: bytes, token: str) -> Principal:
         subject=None,
         scopes=frozenset(claims.get("scopes") or ()),
     )
+
+
+def principal(secret: bytes, token: str) -> Principal:
+    """A client token on its own. Never carries a subject."""
+    return principal_from_claims(open_token(secret, token))
 
 
 def exchange(secret: bytes, token: str, grant: str) -> Principal:

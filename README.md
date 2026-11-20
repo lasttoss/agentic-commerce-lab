@@ -35,9 +35,28 @@ tier promoted by hand                  unauthenticated
 | Money is priced by a table, never by the caller | an amount in the arguments is refused, not ignored | `charge.py`, `tests:test_the_price_comes_from_the_table_not_from_the_caller` |
 | Charging needs the user's own grant | a partner key is not permission to spend someone's money | `identity.py:exchange`, `tests:test_a_partner_cannot_charge_without_a_users_mandate` |
 | One idempotency key, one charge | agent retries are normal; a double charge is a refund | `charge.py`, `tests:test_the_same_key_charges_once_and_returns_the_same_receipt` |
+| A guest cannot read a person or spend money | the default is the widest surface, so it must be the narrowest profile | `policy.py:GUEST`, `tests:test_a_guest_cannot_read_orders_or_charge` |
 
 Every refusal names a reason from a closed set of nine (`identity.REASONS`), and the gate counts
 them, so "how often is this integration refused, and why" is a number instead of an anecdote.
+
+## The default is guest, and there is no account system
+
+Nobody logs in to use the demo. The token is `guest`: one tool (`catalog.search`), twelve calls a
+minute, cannot charge, cannot name a person. That is the whole default, and it is the narrowest
+profile in the file.
+
+`demo_login.py` is a stand-in with plaintext passwords in the repository, so `demo.py` and the tests
+do not need an IdP. It exists to be replaced. **Three seams, and only three:**
+
+```
+identity.principal_from_claims()   where your OIDC / session / API key becomes a Principal
+identity.exchange()                where a grant is issued (redirect consent, or a signed assertion)
+policy.PROFILES                    where a new role is added -- never edit a live profile
+```
+
+Named account systems are somebody else's asset, and the honest way to integrate one is to put
+it behind those three functions rather than to grow half of one here.
 
 ## Two identities travel on one request
 
@@ -68,7 +87,7 @@ Status: research notes, not production software. No support, no SLA, no deployme
 ## Run it
 
 ```bash
-python3 -m unittest discover -s tests    # 17 tests, no network, no keys
+python3 -m unittest discover -s tests    # 22 tests, no network, no keys
 python3 demo.py                          # the table above, from the code
 ```
 
