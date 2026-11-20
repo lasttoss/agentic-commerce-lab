@@ -1,0 +1,22 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests
+        run: python3 -m unittest discover -s tests -v
+      - name: The demo still tells the truth
+        run: python3 demo.py
+      - name: No dependency crept in
+        run: |
+          test ! -f requirements.txt || (echo "this lab needs no dependencies" && exit 1)
